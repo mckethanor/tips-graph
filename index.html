@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<!-- saved from url=(0044)http://kenedict.com/networks/worldcup14/vis/ , thanks Andre!-->
+<html>
+
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF8">
+  <title>Bankless DAO Tips Network Graph</title>
+  <script type="text/javascript" src="./exampleUtil.js"></script>
+
+  <script type="text/javascript" src="./visjs/dist/vis.js"></script>
+  <link type="text/css" rel="stylesheet" href="./visjs/dist/vis-network.min.css">
+
+  <style type="text/css">
+    body {
+      font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+    }
+
+    #mynetwork {
+      width: 100%;
+      height: 800px;
+      border: 1px solid lightgray;
+    }
+
+    div.nodeContent {
+
+      border: 1px solid lightgray;
+      width: 480px;
+      height: 780px;
+      padding: 10px;
+    }
+
+    pre {
+      padding: 5px;
+      margin: 5px;
+    }
+
+    .string {
+      color: green;
+    }
+
+    .number {
+      color: darkorange;
+    }
+
+    .boolean {
+      color: blue;
+    }
+
+    .null {
+      color: magenta;
+    }
+
+    .key {
+      color: red;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>Bankless DAO Tips Network Graph</h2>
+
+  <div id="mynetwork"></div>
+  <div class="nodeContent">
+    <h4>User Selected Info:</h4>
+    <div id="nodeContent"></div>
+  </div>
+
+  <script type="text/javascript">
+    var network;
+
+    var nodes = new vis.DataSet();
+    var edges = new vis.DataSet();
+    var gephiImported;
+    var highlightActive = false;
+    var allNodes;
+
+    var to_sums;
+    var from_sums;
+
+    var nodeContent = document.getElementById('nodeContent');
+
+    loadJSON('./tips-graph.json', redrawAll, function (err) { console.log('error') });
+
+    loadJSON('./from_sums.json', function (data) { from_sums = data }, function (err) { console.log('error') });
+    loadJSON('./to_sums.json', function (data) { to_sums = data }, function (err) { console.log('error') });
+
+    var container = document.getElementById('mynetwork');
+    var data = {
+      nodes: nodes,
+      edges: edges
+    };
+    var options = {
+      nodes: {
+        shape: 'dot',
+        font: {
+          face: 'Tahoma',
+          color: '#FF0000',
+          background: '#FFFFFF',
+          size: 14, // px
+          bold: {
+            color: '#FF0000',
+            size: 14, // px
+            face: 'arial',
+            vadjust: 0,
+            mod: 'bold',
+          }
+        }
+      },
+      edges: {
+        width: 0.15,
+        "smooth": {
+          "type": "curvedCW",
+          "roundness": 0.3
+        },
+        color: { inherit: 'from' },
+        arrows: {
+          to: {
+            enabled: true,
+            scaleFactor: 0.5,
+            type: "arrow"
+          }
+        }
+      },
+      interaction: {
+        tooltipDelay: 200,
+        hideEdgesOnDrag: true
+      },
+      "physics": {
+        "forceAtlas2Based": {
+          "gravitationalConstant": -33,
+          "springLength": 0,
+          "springConstant": 0.1,
+          "damping": 1,
+          "avoidOverlap": 1
+        },
+        "maxVelocity": 0,
+        "minVelocity": 0.01,
+        "solver": "forceAtlas2Based"
+      }
+    };
+
+    // get a JSON object
+
+    network = new vis.Network(container, data, options);
+    network.on("click", neighbourhoodHighlight);
+
+    function neighbourhoodHighlight(params) {
+      // reset all nodes
+      for (var nodeId in allNodes) {
+        allNodes[nodeId].color = 'rgba(0,0,0,1)';
+        if (allNodes[nodeId].hiddenLabel !== undefined) {
+          allNodes[nodeId].label = allNodes[nodeId].hiddenLabel;
+          allNodes[nodeId].hiddenLabel = undefined;
+        }
+      }
+
+      // if something is selected:
+      if (params.nodes.length > 0) {
+        var data = nodes.get(params.nodes[0]); // get the data from selected node
+        from_data = from_sums.find(x => x.id == parseInt(data.id))
+        to_data = to_sums.find(x => x.id == parseInt(data.id))
+
+        if (data.label) {
+          nodeContent.innerHTML = "<h3>" + data.label + "</h3>";
+        } else {
+          nodeContent.innerHTML = "<h3>" + data.hiddenLabel + "</h3>";
+        }
+        if (from_data) {
+          nodeContent.innerHTML += "BANK sent: " + from_data.amount.toString().toLocaleString() + "<br>"; //JSON.stringify(data, undefined, 3); // show the data in the div
+        }
+        if (to_data) {
+          nodeContent.innerHTML += "BANK received: " + to_data.amount.toString().toLocaleString(); //JSON.stringify(data, undefined, 3); // show the data in the div
+        }
+        highlightActive = true;
+        var i, j;
+        var selectedNode = params.nodes[0];
+        var degrees = 1;
+
+        // mark all nodes as hard to read.
+        for (var nodeId in allNodes) {
+          allNodes[nodeId].color = 'rgba(200,200,200,0.5)';
+          if (allNodes[nodeId].hiddenLabel === undefined) {
+            allNodes[nodeId].hiddenLabel = allNodes[nodeId].label;
+            allNodes[nodeId].label = undefined;
+          }
+        }
+        var connectedNodes = network.getConnectedNodes(selectedNode);
+        var allConnectedNodes = [];
+
+        // get the second degree nodes
+        for (i = 1; i < degrees; i++) {
+          for (j = 0; j < connectedNodes.length; j++) {
+            allConnectedNodes = allConnectedNodes.concat(network.getConnectedNodes(connectedNodes[j]));
+          }
+        }
+
+        // all second degree nodes get a different color and their label back
+        for (i = 0; i < allConnectedNodes.length; i++) {
+          allNodes[allConnectedNodes[i]].color = 'rgba(0,0,0,0.0)';
+          if (allNodes[allConnectedNodes[i]].hiddenLabel !== undefined) {
+            allNodes[allConnectedNodes[i]].label = allNodes[allConnectedNodes[i]].hiddenLabel;
+            allNodes[allConnectedNodes[i]].hiddenLabel = undefined;
+          }
+        }
+
+        // all first degree nodes get their own color and their label back
+        for (i = 0; i < connectedNodes.length; i++) {
+          allNodes[connectedNodes[i]].color = 'rgba(0,0,0,0.25)';
+          if (allNodes[connectedNodes[i]].hiddenLabel !== undefined) {
+            allNodes[connectedNodes[i]].label = allNodes[connectedNodes[i]].hiddenLabel;
+            allNodes[connectedNodes[i]].hiddenLabel = undefined;
+          }
+        }
+
+        // the main node gets its own color and its label back.
+        allNodes[selectedNode].color = 'rgba(255,0,0,0,1)';
+        if (allNodes[selectedNode].hiddenLabel !== undefined) {
+          allNodes[selectedNode].label = allNodes[selectedNode].hiddenLabel;
+          allNodes[selectedNode].hiddenLabel = undefined;
+        }
+      }
+      else if (highlightActive === true) {
+        // reset all nodes
+        for (var nodeId in allNodes) {
+          allNodes[nodeId].color = 'rgba(0,0,0,1)';
+          if (allNodes[nodeId].hiddenLabel !== undefined) {
+            allNodes[nodeId].label = allNodes[nodeId].hiddenLabel;
+            allNodes[nodeId].hiddenLabel = undefined;
+          }
+        }
+        highlightActive = false
+      }
+
+      // transform the object into an array
+      var updateArray = [];
+      for (nodeId in allNodes) {
+        if (allNodes.hasOwnProperty(nodeId)) {
+          updateArray.push(allNodes[nodeId]);
+        }
+      }
+      nodes.update(updateArray);
+    }
+
+
+    /**
+     * This function fills the DataSets. These DataSets will update the network.
+     */
+    function redrawAll(gephiJSON) {
+      if (gephiJSON.nodes === undefined) {
+        gephiJSON = gephiImported;
+      }
+      else {
+        gephiImported = gephiJSON;
+      }
+
+      nodes.clear();
+      edges.clear();
+
+      var fixed = true;
+      var parseColor = true;
+
+      var parsed = vis.network.gephiParser.parseGephi(gephiJSON, {
+        fixed: fixed,
+        parseColor: parseColor
+      });
+
+      // add the parsed data to the DataSets.
+      nodes.add(parsed.nodes);
+      edges.add(parsed.edges);
+
+      var data = nodes.get(2); // get the data from node 2 as example
+      nodeContent.innerHTML = JSON.stringify(data, undefined, 3); // show the data in the div
+      network.fit(); // zoom to fit
+
+      allNodes = nodes.get({ returnType: "Object" });
+    }
+
+
+  </script>
+
+
+</body>
+
+</html>
